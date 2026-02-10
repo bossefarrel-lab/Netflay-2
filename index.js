@@ -8,45 +8,50 @@ app.use(cors());
 
 app.get('/scrape', async (req, res) => {
     const movie = req.query.q;
-    if (!movie) return res.json({ error: "Veuillez entrer un nom de film" });
+    if (!movie) return res.json({ error: "Nom du film manquant" });
 
     try {
-        // Recherche sur une source type MovieBox / Pro-Stream (100% Français)
-        const searchUrl = `https://monstream.org/search?q=${encodeURIComponent(movie)}`;
-        
+        // 1. On cherche le film sur une source française stable
+        const searchUrl = `https://french-stream.vip/?s=${encodeURIComponent(movie)}`;
         const { data } = await axios.get(searchUrl, {
             headers: { 'User-Agent': 'Mozilla/5.0' }
         });
 
         const $ = cheerio.load(data);
-        // On récupère le premier film qui correspond
-        const movieLink = $('.movie-item a').first().attr('href');
+        const moviePage = $('a[href*="/films/"]').first().attr('href');
 
-        if (!movieLink) {
-            return res.json({ servers: [], message: "Film non trouvé en VF" });
+        if (!moviePage) {
+            return res.json({ servers: [], message: "Film non trouvé" });
         }
 
-        // Extraction des serveurs VF (Vidzy, Uqload, Upvid)
-        const moviePage = await axios.get(movieLink, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        const $$ = cheerio.load(moviePage.data);
-        let servers = [];
+        // 2. On entre dans la page du film pour trouver les serveurs français
+        const pageRes = await axios.get(moviePage, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const $$ = cheerio.load(pageRes.data);
+        let serversList = [];
 
-        $$('iframe, source').each((i, el) => {
-            let src = $$(el).attr('src') || $$(el).attr('data-src');
-            if (src && (src.includes('uqload') || src.includes('vidzy') || src.includes('voe'))) {
-                servers.push(src.startsWith('//') ? "https:" + src : src);
+        // 3. On extrait uniquement les liens des serveurs de streaming VF
+        $$('iframe').each((i, el) => {
+            const src = $$(el).attr('src');
+            if (src) {
+                // On filtre pour ne garder que les serveurs de qualité
+                if (src.includes('vidzy') || src.includes('uqload') || src.includes('voe')) {
+                    const cleanUrl = src.startsWith('//') ? `https:${src}` : src;
+                    serversList.push({
+                        name: src.includes('vidzy') ? "Serveur Premium VF" : "Serveur Rapide VF",
+                        link: cleanUrl
+                    });
+                }
             }
         });
 
         res.json({
-            title: movie,
-            servers: servers
+            movie: movie,
+            servers: serversList
         });
 
     } catch (error) {
-        res.json({ error: "Erreur de connexion aux serveurs VF" });
+        res.json({ error: "Erreur lors de la récupération des serveurs" });
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Moteur MovieBox prêt !"));
+app.listen(process.env.PORT || 3000);
