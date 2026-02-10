@@ -8,43 +8,36 @@ app.use(cors());
 
 app.get('/scrape', async (req, res) => {
     const movie = req.query.q;
-    
-    // Si pas de film, on donne un exemple au lieu de planter
-    if (!movie) {
-        return res.json({ message: "Ajoutez ?q=NomDuFilm à la fin de l'URL" });
-    }
+    if (!movie) return res.json({ message: "Veuillez ajouter ?q=NomDuFilm" });
 
     try {
-        // Recherche sur French-Stream
-        const searchUrl = `https://french-stream.vip/?s=${encodeURIComponent(movie)}`;
+        // Version simplifiée sans fioritures pour éviter l'erreur URL
+        const searchUrl = "https://french-stream.vip/?s=" + encodeURIComponent(movie);
+        
         const response = await axios.get(searchUrl, { 
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            timeout: 5000 
+            headers: { 'User-Agent': 'Mozilla/5.0' }
         });
 
         const $ = cheerio.load(response.data);
         const filmUrl = $('a[href*="/films/"]').first().attr('href');
 
-        if (!filmUrl) {
-            return res.json({ servers: [], message: "Film non trouvé" });
-        }
+        if (!filmUrl) return res.json({ servers: [], message: "Non trouvé" });
 
-        // Extraction des serveurs
         const page = await axios.get(filmUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const $$ = cheerio.load(page.data);
-        let servers = [];
+        let links = [];
 
         $$('iframe').each((i, el) => {
-            const src = $$(el).attr('src');
+            let src = $$(el).attr('src');
             if (src && (src.includes('uqload') || src.includes('voe') || src.includes('dood') || src.includes('vidzy'))) {
-                servers.push(src.startsWith('//') ? `https:${src}` : src);
+                links.push(src.startsWith('//') ? "https:" + src : src);
             }
         });
 
-        res.json({ title: movie, servers: servers });
+        res.json({ title: movie, servers: links });
 
     } catch (error) {
-        res.json({ error: "Erreur de connexion", details: error.message });
+        res.json({ error: "Problème de connexion au site source" });
     }
 });
 
