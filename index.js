@@ -1,6 +1,5 @@
 const express = require('express');
 const axios = require('axios');
-const cheerio = require('cheerio');
 const cors = require('cors');
 
 const app = express();
@@ -11,37 +10,31 @@ app.get('/scrape', async (req, res) => {
     if (!movie) return res.json({ message: "Ajoutez ?q=NomDuFilm" });
 
     try {
-        // On utilise un service AllOrigins pour contourner les blocages (Proxy)
-        const searchUrl = `https://french-stream.vip/?s=${encodeURIComponent(movie)}`;
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(searchUrl)}`;
+        // Utilisation d'une API de recherche directe plus robuste
+        const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=a5266405788339599557b49479b69994&query=${encodeURIComponent(movie)}`;
+        const response = await axios.get(searchUrl);
         
-        const response = await axios.get(proxyUrl);
-        const data = JSON.parse(response.data.contents);
-        
-        const $ = cheerio.load(data);
-        const filmUrl = $('a[href*="/films/"]').first().attr('href');
+        if (response.data.results.length === 0) {
+            return res.json({ servers: [], message: "Film non trouvé" });
+        }
 
-        if (!filmUrl) return res.json({ servers: [], message: "Film non trouvé" });
+        const id = response.data.results[0].id;
 
-        // Deuxième étape pour extraire les serveurs
-        const pageProxy = `https://api.allorigins.win/get?url=${encodeURIComponent(filmUrl)}`;
-        const pageResponse = await axios.get(pageProxy);
-        const pageData = JSON.parse(pageResponse.data.contents);
-        
-        const $$ = cheerio.load(pageData);
-        let links = [];
+        // On génère des liens vers des lecteurs multi-sources connus pour être stables
+        const links = [
+            `https://vidsrc.me/embed/movie?tmdb=${id}`,
+            `https://embed.su/embed/movie/${id}`,
+            `https://vidsrc.to/embed/movie/${id}`
+        ];
 
-        $$('iframe').each((i, el) => {
-            let src = $$(el).attr('src');
-            if (src && (src.includes('uqload') || src.includes('voe') || src.includes('dood') || src.includes('vidzy'))) {
-                links.push(src.startsWith('//') ? "https:" + src : src);
-            }
+        res.json({ 
+            title: movie, 
+            tmdb_id: id,
+            servers: links 
         });
 
-        res.json({ title: movie, servers: links });
-
     } catch (error) {
-        res.json({ error: "Le site source bloque encore, essai avec un autre film" });
+        res.json({ error: "Erreur du moteur", details: error.message });
     }
 });
 
