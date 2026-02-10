@@ -1,5 +1,4 @@
 const express = require('express');
-const axios = require('axios');
 const cors = require('cors');
 
 const app = express();
@@ -10,27 +9,20 @@ app.get('/scrape', async (req, res) => {
     if (!movie) return res.json({ message: "Ajoutez ?q=NomDuFilm" });
 
     try {
-        // Utilisation d'une API de recherche directe plus robuste
-        const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=a5266405788339599557b49479b69994&query=${encodeURIComponent(movie)}`;
-        const response = await axios.get(searchUrl);
-        
-        if (response.data.results.length === 0) {
-            return res.json({ servers: [], message: "Film non trouvé" });
-        }
+        // On nettoie le nom du film pour l'URL
+        const cleanName = encodeURIComponent(movie);
 
-        const id = response.data.results[0].id;
-
-        // On génère des liens vers des lecteurs multi-sources connus pour être stables
+        // On propose des lecteurs qui cherchent automatiquement la VF
         const links = [
-            `https://vidsrc.me/embed/movie?tmdb=${id}`,
-            `https://embed.su/embed/movie/${id}`,
-            `https://vidsrc.to/embed/movie/${id}`
+            `https://vidsrc.me/embed/movie?title=${cleanName}`,
+            `https://embed.su/embed/movie/${cleanName}`,
+            `https://autoembed.to/movie/tmdb/${cleanName}?server=1`
         ];
 
         res.json({ 
             title: movie, 
-            tmdb_id: id,
-            servers: links 
+            servers: links,
+            note: "Si le premier lien n'est pas en VF, essaie le serveur suivant ou change la langue dans le lecteur."
         });
 
     } catch (error) {
@@ -38,4 +30,7 @@ app.get('/scrape', async (req, res) => {
     }
 });
 
-app.listen(process.env.PORT || 3000);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log("Moteur prêt !");
+});
